@@ -1,5 +1,3 @@
-
-
 from gym import Env
 from gym.spaces import Discrete, Box
 import numpy as np
@@ -194,12 +192,18 @@ for episode in range(1, episodes+1):
     score = 0 
     
     x_val1 = []
-    x_val2=[]
+    x_val2 = []
+    x_val3 = []
+    x_val4 = []
     y_val1 = []
     y_val2 = []
+    y_val3 = []
+    y_val4 = []
     a=0
     action1=[]
     n_state1=[]
+    reward1=[]
+    score1=[]
 
     plt.style.use('fivethirtyeight')
     while not done:
@@ -208,8 +212,11 @@ for episode in range(1, episodes+1):
         action1.append(action)
         n_state, reward, done, info = env.step(action)
         n_state1.append(n_state)
+        reward1.append(reward)
+        score+=reward
+        score1.append(score)
         a=a+1
-        
+     
     
     index=count()
     def animate1(i):
@@ -239,16 +246,41 @@ for episode in range(1, episodes+1):
             plt.legend(loc = 'upper left')
             plt.tight_layout()
     
+    def animate3(i):
+            x_val3.append(next(index))
+           
+            y_val3.append(reward1[i])
+            plt.figure(3)
+            plt.cla()
+           
+            plt.plot(x_val3, y_val3,label='reward',color='b')
+            plt.xlabel('time (sec)')
+            plt.ylabel('reward')
+            plt.legend(loc = 'upper left')
+            plt.tight_layout()
+
+    def animate4(i):
+            x_val4.append(next(index))
+           
+            y_val4.append(score1[i])
+            plt.figure(4)
+            plt.cla()
+           
+            plt.plot(x_val4, y_val4,label='score',color='purple')
+            plt.xlabel('time (sec)')
+            plt.ylabel('score')
+            plt.legend(loc = 'upper left')
+            plt.tight_layout()
     
     ani1 = FuncAnimation(plt.figure(1), animate1, interval = 100)
     ani2 = FuncAnimation(plt.figure(2), animate2, interval = 100)
-    score+=reward
+    ani3 = FuncAnimation(plt.figure(3), animate3, interval = 100)
+    ani4 = FuncAnimation(plt.figure(4), animate4, interval = 100)
     plt.tight_layout()
     plt.show()  
 
     
     print('Episode:{} Score:{}'.format(episode, score))
- 
 
  
 
