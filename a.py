@@ -33,11 +33,8 @@ def opening_event_func(weather, hour):
 class RefriEnv(Env):
     def __init__(self, weather):
         #action space
-        custom_action_space = Discrete(4)
+        custom_action_space = Box(low=-20.0, high=8.0, shape = (1,), dtype = float)
         self.action_space = custom_action_space
-        # The real values are that mapping the action value
-        # 0 to 3 is mapping the -5,0,5,10
-        self.action_to_value = {0: -5, 1: 0, 2: 5, 3: 10}
         # Temperature array
         self.observation_space = Box(low=np.array([-50]), high=np.array([50]))
         # Set start temp
@@ -46,11 +43,9 @@ class RefriEnv(Env):
         self.refri_hour = 0
         self.refri_min = 0
         self.refri_sec = 0
-        self.weather = weather
 
-        
+        self.weather = weather      
         self.hour_event = opening_event_func(self.weather, self.refri_hour)
-
         #DR 발생에 대한 boolean 값
         self.event_DR = False
         #DR 발생 시간에 대한 random int 값
@@ -65,18 +60,6 @@ class RefriEnv(Env):
         self.c = 3900
         self.P_cool = 200
         self.E = 0.5
-
-
-    #transform the action to value
-    def map_action_to_value(self, action):
-        return self.action_to_value[action]
-        
-    #transform the value to action
-    def map_value_to_action(self, value):
-        for action, val in self.action_to_value.items():
-            if val == value:
-                return action
-        raise ValueError("Invalid value: {}".format(value))
     
     #RefriEnv 클래스의 step 메소드를 수정했음. 
     #이 메소드에서 시간대별 문 여닫는 이벤트 수를 고려하여 냉장고의 온도가 업데이트되는 방식을 변경함. 
@@ -86,12 +69,60 @@ class RefriEnv(Env):
         # Get door opening count for the current minute
         O = self.hour_event[self.refri_sec + self.refri_min * 60]
 
-        # Apply action
-        if np.any(self.state > action):
-            self.state += (self.P_cool*self.E-self.U*self.A*(self.state-self.T_ext)+O*self.h*(self.T_ext-self.state))/(self.m*self.c)
+        #action samping(-20.5 ~ 5.0 one decimals float number)
+        action = self.action_space.sample()
+        action = np.round(action, decimals=1)
+
+        #오후 1시에서 6시 사이(최대부하로 냉장고를 가동하는 시간)에 랜덤으로 주어지는 DR 발생시간을 계산하여 DR상태를 일으킨다.
+        #DR 상황은 1시간동안 지속된다.
+        if(self.event_DR_time == self.refri_hour):
+            self.event_DR = True
+        elif(self.event_DR_time + 1 == self.refri_hour):
+            self.event_DR = False
         else:
-            self.state += (-self.U*self.A*(self.state-self.T_ext)+O*self.h*(self.T_ext-self.state))/(self.m*self.c)
+            self.event_DR = False
         
+        # Apply action
+        #DR이 발생되었을 때의 처리
+        #DR 상황일 때 Th보다 action(설정온도)이/가 작으면 reward의 손실을 준다.
+        if(self.event_DR == True):
+            if(action < 0 or action > 5):
+                reward = -0.1
+            if np.any(self.state > action):
+                self.state += (self.P_cool*self.E-self.U*self.A*(self.state-self.T_ext)+O*self.h*(self.T_ext-self.state))/(self.m*self.c)
+            else:
+                self.state += (-self.U*self.A*(self.state-self.T_ext)+O*self.h*(self.T_ext-self.state))/(self.m*self.c)
+        #DR이 발생되지 않았을 때의 상황
+        #전력 사용시간대에 따라 Ts를 달리 생각하여 reward값을 부여한다.
+        else:
+            #경부하 시간대
+            if(self.refri_hour >= 22 and self.refri_hour <= 8):
+                if(action < -5 or action > 0):
+                    reward = -0.1
+                if np.any(self.state > action):
+                    self.state += (self.P_cool*self.E-self.U*self.A*(self.state-self.T_ext)+O*self.h*(self.T_ext-self.state))/(self.m*self.c)
+                else:
+                    self.state += (-self.U*self.A*(self.state-self.T_ext)+O*self.h*(self.T_ext-self.state))/(self.m*self.c)
+            #중간부하 시간대
+            elif((self.refri_hour >= 8 and self.refri_hour <= 11) or 
+                 (self.refri_hour >= 12 and self.refri_hour <= 13) or 
+                 (self.refri_hour >= 18 and self.refri_hour <= 22)):
+                if(action < -3 or action > 2):
+                    reward = -0.1
+                if np.any(self.state > action):
+                    self.state += (self.P_cool*self.E-self.U*self.A*(self.state-self.T_ext)+O*self.h*(self.T_ext-self.state))/(self.m*self.c)
+                else:
+                    self.state += (-self.U*self.A*(self.state-self.T_ext)+O*self.h*(self.T_ext-self.state))/(self.m*self.c)
+            #최대부하 시간대
+            else:
+                if(action < -1 or action > 4):
+                    reward = -0.1
+                if np.any(self.state > action):
+                    self.state += (self.P_cool*self.E-self.U*self.A*(self.state-self.T_ext)+O*self.h*(self.T_ext-self.state))/(self.m*self.c)
+                else:
+                    self.state += (-self.U*self.A*(self.state-self.T_ext)+O*self.h*(self.T_ext-self.state))/(self.m*self.c)
+
+
         # Increase refrigerator length by 1 second
         self.refri_sec += 1
         if self.refri_sec == 60:
@@ -105,12 +136,12 @@ class RefriEnv(Env):
         
         # Calculate reward
         if np.any(self.state > action): 
-            reward = -0.01 
+            reward = -0.01
         else: 
             reward= -(self.state-action)*0.1
         
         # Check if episode is done
-        if self.refri_hour == 24: 
+        if self.refri_hour == 24:
             done = True
         else:
             done = False
