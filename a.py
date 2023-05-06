@@ -70,7 +70,6 @@ class RefriEnv(Env):
         O = self.hour_event[self.refri_sec + self.refri_min * 60]
 
         #action samping(-20.5 ~ 5.0 one decimals float number)
-        action = self.action_space.sample()
         action = np.round(action, decimals=1)
 
         #오후 1시에서 6시 사이(최대부하로 냉장고를 가동하는 시간)에 랜덤으로 주어지는 DR 발생시간을 계산하여 DR상태를 일으킨다.
@@ -85,7 +84,7 @@ class RefriEnv(Env):
         # Apply action
         #DR이 발생되었을 때의 처리
         #DR 상황일 때 Th보다 action(설정온도)이/가 작으면 reward의 손실을 준다.
-        if(self.event_DR == True):
+        if(self.event_DR):
             if(action < 0 or action > 5):
                 reward = -0.1
             if np.any(self.state > action):
@@ -96,7 +95,7 @@ class RefriEnv(Env):
         #전력 사용시간대에 따라 Ts를 달리 생각하여 reward값을 부여한다.
         else:
             #경부하 시간대
-            if(self.refri_hour >= 22 and self.refri_hour <= 8):
+            if(self.refri_hour >= 22 or self.refri_hour <= 8):
                 if(action < -5 or action > 0):
                     reward = -0.1
                 if np.any(self.state > action):
