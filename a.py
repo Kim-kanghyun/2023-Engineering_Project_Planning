@@ -69,8 +69,8 @@ class RefriEnv(Env):
         # Get door opening count for the current minute
         O = self.hour_event[self.refri_sec + self.refri_min * 60]
 
-        # action samping(-20.5 ~ 5.0 one decimals float number)
-        action = self.action_space.sample()
+        # #action samping(-20.5 ~ 5.0 one decimals float number)
+        # action = self.action_space.sample()
         action = np.round(action, decimals=1)
 
         # 오후 1시에서 6시 사이(최대부하로 냉장고를 가동하는 시간)에 랜덤으로 주어지는 DR 발생시간을 계산하여 DR상태를 일으킨다.
@@ -82,6 +82,10 @@ class RefriEnv(Env):
         else:
             self.event_DR = False
 
+        cool_state = (self.P_cool * self.E - self.U * self.A * (self.state - self.T_ext) + O * self.h * (
+                    self.T_ext - self.state)) / (self.m * self.c)
+        normal_state = (-self.U * self.A * (self.state - self.T_ext) + O * self.h * (self.T_ext - self.state)) / (
+                    self.m * self.c)
         # Apply action
         # DR이 발생되었을 때의 처리
         # DR 상황일 때 Th보다 action(설정온도)이/가 작으면 reward의 손실을 준다.
@@ -89,11 +93,9 @@ class RefriEnv(Env):
             if action < 0 or action > 5:
                 reward = -0.1
             if np.any(self.state > action):
-                self.state += (self.P_cool * self.E - self.U * self.A * (self.state - self.T_ext) + O * self.h * (
-                        self.T_ext - self.state)) / (self.m * self.c)
+                self.state += cool_state
             else:
-                self.state += (-self.U * self.A * (self.state - self.T_ext) + O * self.h * (
-                        self.T_ext - self.state)) / (self.m * self.c)
+                self.state += normal_state
         # DR이 발생되지 않았을 때의 상황
         # 전력 사용시간대에 따라 Ts를 달리 생각하여 reward값을 부여한다.
         else:
@@ -102,11 +104,9 @@ class RefriEnv(Env):
                 if action < -5 or action > 0:
                     reward = -0.1
                 if np.any(self.state > action):
-                    self.state += (self.P_cool * self.E - self.U * self.A * (self.state - self.T_ext) + O * self.h * (
-                            self.T_ext - self.state)) / (self.m * self.c)
+                    self.state += cool_state
                 else:
-                    self.state += (-self.U * self.A * (self.state - self.T_ext) + O * self.h * (
-                            self.T_ext - self.state)) / (self.m * self.c)
+                    self.state += normal_state
             # 중간부하 시간대
             elif ((8 <= self.refri_hour <= 11) or
                   (12 <= self.refri_hour <= 13) or
@@ -114,21 +114,17 @@ class RefriEnv(Env):
                 if action < -3 or action > 2:
                     reward = -0.1
                 if np.any(self.state > action):
-                    self.state += (self.P_cool * self.E - self.U * self.A * (self.state - self.T_ext) + O * self.h * (
-                            self.T_ext - self.state)) / (self.m * self.c)
+                    self.state += cool_state
                 else:
-                    self.state += (-self.U * self.A * (self.state - self.T_ext) + O * self.h * (
-                            self.T_ext - self.state)) / (self.m * self.c)
+                    self.state += normal_state
             # 최대부하 시간대
             else:
                 if action < -1 or action > 4:
                     reward = -0.1
                 if np.any(self.state > action):
-                    self.state += (self.P_cool * self.E - self.U * self.A * (self.state - self.T_ext) + O * self.h * (
-                            self.T_ext - self.state)) / (self.m * self.c)
+                    self.state += cool_state
                 else:
-                    self.state += (-self.U * self.A * (self.state - self.T_ext) + O * self.h * (
-                            self.T_ext - self.state)) / (self.m * self.c)
+                    self.state += normal_state
 
         # Increase refrigerator length by 1 second
         self.refri_sec += 1
@@ -181,18 +177,19 @@ env = RefriEnv("spring")
 
 env.observation_space.sample()
 
-episodes = 10
-for episode in range(1, episodes + 1):
-    state = env.reset()
-    done = False
-    score = 0
+# episodes = 10
+# for episode in range(1, episodes+1):
+#     state = env.reset()
+#     done = False
+#     score = 0
 
-    while not done:
-        # env.render()
-        action = env.action_space.sample()
-        n_state, reward, done, info = env.step(action)
-        score += reward
-    print('Episode:{} Score:{}'.format(episode, score))
+#     while not done:
+#         #env.render()
+#         action = env.action_space.sample()
+#         n_state, reward, done, info = env.step(action)
+#         score+=reward
+#     print('Episode:{} Score:{}'.format(episode, score))
+
 
 episodes = 1
 for episode in range(1, episodes + 1):
@@ -217,7 +214,8 @@ for episode in range(1, episodes + 1):
     plt.style.use('fivethirtyeight')
     while not done:
         # env.render()
-        action = env.action_space.sample()
+        if a % 60 == 0:
+            action = env.action_space.sample()
         action1.append(action)
         n_state, reward, done, info = env.step(action)
         n_state1.append(n_state)
@@ -292,3 +290,7 @@ for episode in range(1, episodes + 1):
     plt.show()
 
     print('Episode:{} Score:{}'.format(episode, score))
+
+
+
+
