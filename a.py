@@ -82,53 +82,45 @@ class RefriEnv(Env):
         else:
             self.event_DR = False
 
-        cool_state = (self.P_cool * self.E +self.U * self.A * (self.state - self.T_ext) + O * self.h * (
-                    self.T_ext - self.state)) / (self.m * self.c)
+        cool_state = (self.P_cool * self.E + self.U * self.A * (self.state - self.T_ext) + O * self.h * (
+                self.T_ext - self.state)) / (self.m * self.c)
         normal_state = (-self.U * self.A * (self.state - self.T_ext) + O * self.h * (self.T_ext - self.state)) / (
-                    self.m * self.c)
+                self.m * self.c)
+
+        def condition (a, b):
+            if action < a or action > b:
+                reward = -0.1
+            if np.any(self.state > action):
+                diff_state = cool_state
+            else:
+                diff_state = normal_state
+            self.state += diff_state
+            return diff_state
+
+
         # Apply action
         # DR이 발생되었을 때의 처리
         # DR 상황일 때 Th보다 action(설정온도)이/가 작으면 reward의 손실을 준다.
         if self.event_DR:
-            if action < 0 or action > 5:
-                reward = -0.1
-            if np.any(self.state > action):
-                self.state += cool_state
-            else:
-                self.state += normal_state
+            power_usage = condition(0, 5)
+            power_usage_fee = power_usage * 5
         # DR이 발생되지 않았을 때의 상황
         # 전력 사용시간대에 따라 Ts를 달리 생각하여 reward값을 부여한다.
         else:
             # 경부하 시간대
             if 22 <= self.refri_hour or self.refri_hour <= 8:
-                if action < -5 or action > 0:
-                    reward = -0.1
-                if np.any(self.state > action):
-                    self.state = self.state+cool_state
-                    
-                    print(f"state: {self.state} ")
-                    print(f"cool state: {cool_state}")
-                else:
-                    self.state += normal_state
-                    print("2")
+                power_usage = condition(-5, 0)
+                power_usage_fee = power_usage * 0.5
             # 중간부하 시간대
             elif ((8 <= self.refri_hour <= 11) or
                   (12 <= self.refri_hour <= 13) or
                   (18 <= self.refri_hour <= 22)):
-                if action < -3 or action > 2:
-                    reward = -0.1
-                if np.any(self.state > action):
-                    self.state += cool_state
-                else:
-                    self.state += normal_state
+                power_usage = condition(-3, 2)
+                power_usage_fee = power_usage * 2
             # 최대부하 시간대
             else:
-                if action < -1 or action > 4:
-                    reward = -0.1
-                if np.any(self.state > action):
-                    self.state += cool_state
-                else:
-                    self.state += normal_state
+                power_usage = condition(-1, 4)
+                power_usage_fee = power_usage * 3
 
         # Increase refrigerator length by 1 second
         self.refri_sec += 1
@@ -153,13 +145,11 @@ class RefriEnv(Env):
         else:
             done = False
 
-        # Apply temperature noise
-        # self.state += random.randint(-1,1)
         # Set placeholder for info
         info = {}
 
         # Return step information
-        return self.state, reward, done, info
+        return self.state, reward, power_usage, power_usage_fee, done, info
 
     def render(self):
         # Implement viz
@@ -205,15 +195,27 @@ for episode in range(1, episodes + 1):
     x_val2 = []
     x_val3 = []
     x_val4 = []
+    x_val5 = []
+    x_val6 = []
     y_val1 = []
     y_val2 = []
     y_val3 = []
     y_val4 = []
+    y_val5 = []
+    y_val6 = []
+
     a = 0
     action1 = []
     n_state1 = []
     reward1 = []
     score1 = []
+
+    total_power_usage = []
+    total_power_usage_fee = []
+
+    sum_power_usage = 0
+    sum_power_usage_fee = 0
+
 
     plt.style.use('fivethirtyeight')
     while not done:
@@ -221,9 +223,13 @@ for episode in range(1, episodes + 1):
         if a % 60 == 0:
             action = env.action_space.sample()
         action1.append(action)
-        n_state, reward, done, info = env.step(action)
+        n_state, reward, power_usage, power_usage_fee, done, info = env.step(action)
         n_state1.append(n_state)
         reward1.append(reward)
+        sum_power_usage += max(-power_usage, 0)
+        sum_power_usage_fee += max(-power_usage_fee, 0)
+        total_power_usage.append(sum_power_usage)
+        total_power_usage_fee.append(sum_power_usage_fee)
         score += reward
         score1.append(score)
         a = a + 1
@@ -286,13 +292,40 @@ for episode in range(1, episodes + 1):
         plt.tight_layout()
 
 
-    ani1 = FuncAnimation(plt.figure(1), animate1, interval=100)
-    ani2 = FuncAnimation(plt.figure(2), animate2, interval=100)
-    ani3 = FuncAnimation(plt.figure(3), animate3, interval=100)
-    ani4 = FuncAnimation(plt.figure(4), animate4, interval=100)
+    def animate5(i):
+        x_val5.append(next(index))
+
+        y_val5.append(total_power_usage[i])
+        plt.figure(5)
+        plt.cla()
+
+        plt.plot(x_val5, y_val5, label='Power', color='black')
+        plt.xlabel('time (sec)')
+        plt.ylabel('watt')
+        plt.legend(loc='upper left')
+        plt.tight_layout()
+
+    def animate6(i):
+        x_val6.append(next(index))
+
+        y_val6.append(total_power_usage_fee[i])
+        plt.figure(6)
+        plt.cla()
+
+        plt.plot(x_val6, y_val6, label='fee', color='yellow')
+        plt.xlabel('time (sec)')
+        plt.ylabel('won')
+        plt.legend(loc='upper left')
+        plt.tight_layout()
+
+
+    ani1 = FuncAnimation(plt.figure(1), animate1, interval=10)
+    ani2 = FuncAnimation(plt.figure(2), animate2, interval=10)
+    ani3 = FuncAnimation(plt.figure(3), animate3, interval=10)
+    ani4 = FuncAnimation(plt.figure(4), animate4, interval=10)
+    ani5 = FuncAnimation(plt.figure(5), animate5, interval=10)
+    ani6 = FuncAnimation(plt.figure(6), animate6, interval=10)
     plt.tight_layout()
     plt.show()
 
     print('Episode:{} Score:{}'.format(episode, score))
-
-
