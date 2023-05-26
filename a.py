@@ -58,7 +58,7 @@ class RefriEnv(Env):
         self.h = 10
         self.m = 10
         self.c = 3900
-        self.P_cool = 20000
+        self.P_cool = 200000
         self.E = 0.5
 
     # RefriEnv 클래스의 step 메소드를 수정했음. 
@@ -82,11 +82,15 @@ class RefriEnv(Env):
         else:
             self.event_DR = False
 
-        cool_state = (self.P_cool * self.E + self.U * self.A * (self.state - self.T_ext) + O * self.h * (
+        cool_state = (-self.P_cool * self.E + self.U * self.A * (self.state - self.T_ext) + O * self.h * (
                 self.T_ext - self.state)) / (self.m * self.c)
         normal_state = (-self.U * self.A * (self.state - self.T_ext) + O * self.h * (self.T_ext - self.state)) / (
                 self.m * self.c)
-
+       
+        #문열림 이벤트가 발생 했을 때, 질량을 줄인다. (m이 0이되면 식이 0으로 나눠지므로 )
+        if O==1 and self.m!=0.001:
+            self.m+=-0.001
+            
         def condition (a, b):
             if action < a or action > b:
                 reward = -0.1
