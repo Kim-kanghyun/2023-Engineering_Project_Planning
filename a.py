@@ -58,7 +58,7 @@ class RefriEnv(Env):
         self.h = 10
         self.m = 10
         self.c = 3900
-        self.P_cool = 200
+        self.P_cool = 20000
         self.E = 0.5
 
     # RefriEnv 클래스의 step 메소드를 수정했음. 
