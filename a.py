@@ -7,6 +7,7 @@ from itertools import count
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
+import math
 
 
 def opening_sec():
@@ -60,8 +61,8 @@ class RefriEnv(Env):
         self.h = 10
         self.m = 10
         self.c = 3900
-        self.P_cool = 200000
-        self.E = 0.5
+        
+        self.E = 1
 
     # RefriEnv 클래스의 step 메소드를 수정했음. 
     # 이 메소드에서 시간대별 문 여닫는 이벤트 수를 고려하여 냉장고의 온도가 업데이트되는 방식을 변경함. 
@@ -74,6 +75,10 @@ class RefriEnv(Env):
         # #action samping(-20.5 ~ 5.0 one decimals float number)
         # action = self.action_space.sample()
         action = np.round(action, decimals=1)
+        if self.state > action:
+            self.P_cool = math.log2(self.state-action)
+            cool_state = (-self.P_cool * self.E + self.U * self.A * (self.state - self.T_ext) + O * self.h * (
+                self.T_ext - self.state)) / (self.m * self.c)
 
         # 오후 1시에서 6시 사이(최대부하로 냉장고를 가동하는 시간)에 랜덤으로 주어지는 DR 발생시간을 계산하여 DR상태를 일으킨다.
         # DR 상황은 1시간동안 지속된다.
@@ -84,8 +89,7 @@ class RefriEnv(Env):
         else:
             self.event_DR = False
 
-        cool_state = (-self.P_cool * self.E + self.U * self.A * (self.state - self.T_ext) + O * self.h * (
-                self.T_ext - self.state)) / (self.m * self.c)
+        
         normal_state = (-self.U * self.A * (self.state - self.T_ext) + O * self.h * (self.T_ext - self.state)) / (
                 self.m * self.c)
        
@@ -96,12 +100,12 @@ class RefriEnv(Env):
         def condition ():
             if np.any(self.state > action):
                 diff_state = cool_state
-                power = 100 + (self.state - action) * self.U * self.A * (24 - self.state) / self.P_cool
+                power = 100 + (self.state - action) * self.U * self.A * (24 - self.state) / self.E
             else:
                 diff_state = normal_state
                 power = 100
             self.state += diff_state
-            return power
+            return power/3600000
 
 
         # Apply action
@@ -116,17 +120,17 @@ class RefriEnv(Env):
             # 경부하 시간대
             if 22 <= self.refri_hour or self.refri_hour <= 8:
                 power_usage = condition()
-                power_usage_fee = power_usage * self.weather_fee[self.weather][0] / 3600
+                power_usage_fee = power_usage * self.weather_fee[self.weather][0]
             # 중간부하 시간대
             elif ((8 <= self.refri_hour <= 11) or
                   (12 <= self.refri_hour <= 13) or
                   (18 <= self.refri_hour <= 22)):
                 power_usage = condition()
-                power_usage_fee = power_usage * self.weather_fee[self.weather][1] / 3600
+                power_usage_fee = power_usage * self.weather_fee[self.weather][1]
             # 최대부하 시간대
             else:
                 power_usage = condition()
-                power_usage_fee = power_usage * self.weather_fee[self.weather][2] /3600
+                power_usage_fee = power_usage * self.weather_fee[self.weather][2]
 
         # Increase refrigerator length by 1 second
         self.refri_sec += 1
@@ -149,7 +153,7 @@ class RefriEnv(Env):
         info = {}
         reward = power_usage_fee
         # Return step information
-        return self.state, reward, power_usage, done, info
+        return self.state, reward, done, info
 
     def render(self):
         # Implement viz
@@ -195,14 +199,10 @@ for episode in range(1, episodes + 1):
     x_val2 = []
     x_val3 = []
     x_val4 = []
-    x_val5 = []
-    x_val6 = []
     y_val1 = []
     y_val2 = []
     y_val3 = []
     y_val4 = []
-    y_val5 = []
-    y_val6 = []
 
     a = 0
     action1 = []
@@ -210,24 +210,15 @@ for episode in range(1, episodes + 1):
     reward1 = []
     score1 = []
 
-    total_power_usage = []
-    total_power_usage_fee = []
-
-    sum_power_usage = 0
-    sum_power_usage_fee = 0
-
-
     plt.style.use('fivethirtyeight')
     while not done:
         # env.render()
         if a % 60 == 0:
             action = env.action_space.sample()
         action1.append(action)
-        n_state, reward, power_usage, done, info = env.step(action)
+        n_state, reward, done, info = env.step(action)
         n_state1.append(n_state)
         reward1.append(reward)
-        sum_power_usage += power_usage
-        total_power_usage.append(sum_power_usage)
         score += reward
         score1.append(score)
         a = a + 1
@@ -289,40 +280,10 @@ for episode in range(1, episodes + 1):
         plt.legend(loc='upper left')
         plt.tight_layout()
 
-
-    def animate5(i):
-        x_val5.append(next(index))
-
-        y_val5.append(total_power_usage[i])
-        plt.figure(5)
-        plt.cla()
-
-        plt.plot(x_val5, y_val5, label='Power', color='black')
-        plt.xlabel('time (sec)')
-        plt.ylabel('watt')
-        plt.legend(loc='upper left')
-        plt.tight_layout()
-
-    # def animate6(i):
-    #     x_val6.append(next(index))
-
-    #     y_val6.append(total_power_usage_fee[i])
-    #     plt.figure(6)
-    #     plt.cla()
-
-    #     plt.plot(x_val6, y_val6, label='fee', color='yellow')
-    #     plt.xlabel('time (sec)')
-    #     plt.ylabel('won')
-    #     plt.legend(loc='upper left')
-    #     plt.tight_layout()
-
-
     ani1 = FuncAnimation(plt.figure(1), animate1, interval=1)
     ani2 = FuncAnimation(plt.figure(2), animate2, interval=1)
     ani3 = FuncAnimation(plt.figure(3), animate3, interval=1)
-    ani4 = FuncAnimation(plt.figure(4), animate4, interval=10)
-    ani5 = FuncAnimation(plt.figure(5), animate5, interval=1)
-    # ani6 = FuncAnimation(plt.figure(6), animate6, interval=1)
+    ani4 = FuncAnimation(plt.figure(4), animate4, interval=1)
     plt.tight_layout()
     plt.show()
 
