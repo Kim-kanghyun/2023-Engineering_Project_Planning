@@ -93,39 +93,39 @@ class RefriEnv(Env):
         if O==1 and self.m!=0.001:
             self.m+=-0.001
             
-        def condition (a, b):
-            if action < a or action > b:
-                reward = -0.1
+        def condition ():
             if np.any(self.state > action):
                 diff_state = cool_state
+                power = 100 + (self.state - action) * self.U * self.A * (24 - self.state) / self.P_cool
             else:
                 diff_state = normal_state
+                power = 100
             self.state += diff_state
-            return diff_state
+            return power
 
 
         # Apply action
         # DR이 발생되었을 때의 처리
         # DR 상황일 때 Th보다 action(설정온도)이/가 작으면 reward의 손실을 준다.
         if self.event_DR:
-            power_usage = condition(0, 5)
+            power_usage = condition()
             power_usage_fee = power_usage
         # DR이 발생되지 않았을 때의 상황
         # 전력 사용시간대에 따라 Ts를 달리 생각하여 reward값을 부여한다.
         else:
             # 경부하 시간대
             if 22 <= self.refri_hour or self.refri_hour <= 8:
-                power_usage = condition(-5, 0)
+                power_usage = condition()
                 power_usage_fee = power_usage * self.weather_fee[self.weather][0] / 3600
             # 중간부하 시간대
             elif ((8 <= self.refri_hour <= 11) or
                   (12 <= self.refri_hour <= 13) or
                   (18 <= self.refri_hour <= 22)):
-                power_usage = condition(-3, 2)
+                power_usage = condition()
                 power_usage_fee = power_usage * self.weather_fee[self.weather][1] / 3600
             # 최대부하 시간대
             else:
-                power_usage = condition(-1, 4)
+                power_usage = condition()
                 power_usage_fee = power_usage * self.weather_fee[self.weather][2] /3600
 
         # Increase refrigerator length by 1 second
@@ -326,5 +326,4 @@ for episode in range(1, episodes + 1):
     plt.tight_layout()
     plt.show()
 
-    print('Episode :{} Score:{}'.format(episode, score))
-    print('Hello world!!')
+    print('Episode:{} Score:{}'.format(episode, score))
