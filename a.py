@@ -116,17 +116,17 @@ class RefriEnv(Env):
             # 경부하 시간대
             if 22 <= self.refri_hour or self.refri_hour <= 8:
                 power_usage = condition(-5, 0)
-                power_usage_fee = power_usage * self.weather_fee[self.weather][0]
+                power_usage_fee = power_usage * self.weather_fee[self.weather][0] / 3600
             # 중간부하 시간대
             elif ((8 <= self.refri_hour <= 11) or
                   (12 <= self.refri_hour <= 13) or
                   (18 <= self.refri_hour <= 22)):
                 power_usage = condition(-3, 2)
-                power_usage_fee = power_usage * self.weather_fee[self.weather][1]
+                power_usage_fee = power_usage * self.weather_fee[self.weather][1] / 3600
             # 최대부하 시간대
             else:
                 power_usage = condition(-1, 4)
-                power_usage_fee = power_usage * self.weather_fee[self.weather][2]
+                power_usage_fee = power_usage * self.weather_fee[self.weather][2] /3600
 
         # Increase refrigerator length by 1 second
         self.refri_sec += 1
@@ -139,12 +139,6 @@ class RefriEnv(Env):
             self.refri_hour += 1
             self.hour_event = opening_event_func(self.weather, self.refri_hour)
 
-        # Calculate reward
-        if np.any(self.state > action):
-            reward = -0.01
-        else:
-            reward = -(self.state - action) * 0.1
-
         # Check if episode is done
         if self.refri_hour == 24:
             done = True
@@ -153,9 +147,9 @@ class RefriEnv(Env):
 
         # Set placeholder for info
         info = {}
-
+        reward = power_usage_fee
         # Return step information
-        return self.state, reward, power_usage, power_usage_fee, done, info
+        return self.state, reward, power_usage, done, info
 
     def render(self):
         # Implement viz
@@ -229,13 +223,11 @@ for episode in range(1, episodes + 1):
         if a % 60 == 0:
             action = env.action_space.sample()
         action1.append(action)
-        n_state, reward, power_usage, power_usage_fee, done, info = env.step(action)
+        n_state, reward, power_usage, done, info = env.step(action)
         n_state1.append(n_state)
         reward1.append(reward)
-        sum_power_usage += max(-power_usage, 0)
-        sum_power_usage_fee += max(-power_usage_fee, 0)
+        sum_power_usage += power_usage
         total_power_usage.append(sum_power_usage)
-        total_power_usage_fee.append(sum_power_usage_fee)
         score += reward
         score1.append(score)
         a = a + 1
@@ -270,32 +262,32 @@ for episode in range(1, episodes + 1):
         plt.tight_layout()
 
 
-    # def animate3(i):
-    #     x_val3.append(next(index))
-    #
-    #     y_val3.append(reward1[i])
-    #     plt.figure(3)
-    #     plt.cla()
-    #
-    #     plt.plot(x_val3, y_val3, label='reward', color='b')
-    #     plt.xlabel('time (sec)')
-    #     plt.ylabel('reward')
-    #     plt.legend(loc='upper left')
-    #     plt.tight_layout()
-    #
-    #
-    # def animate4(i):
-    #     x_val4.append(next(index))
-    #
-    #     y_val4.append(score1[i])
-    #     plt.figure(4)
-    #     plt.cla()
-    #
-    #     plt.plot(x_val4, y_val4, label='score', color='purple')
-    #     plt.xlabel('time (sec)')
-    #     plt.ylabel('score')
-    #     plt.legend(loc='upper left')
-    #     plt.tight_layout()
+    def animate3(i):
+        x_val3.append(next(index))
+    
+        y_val3.append(reward1[i])
+        plt.figure(3)
+        plt.cla()
+    
+        plt.plot(x_val3, y_val3, label='reward(power fee)', color='b')
+        plt.xlabel('time (sec)')
+        plt.ylabel('reward (won)')
+        plt.legend(loc='upper left')
+        plt.tight_layout()
+    
+    
+    def animate4(i):
+        x_val4.append(next(index))
+    
+        y_val4.append(score1[i])
+        plt.figure(4)
+        plt.cla()
+    
+        plt.plot(x_val4, y_val4, label='score(summed power fee)', color='purple')
+        plt.xlabel('time (sec)')
+        plt.ylabel('score (won)')
+        plt.legend(loc='upper left')
+        plt.tight_layout()
 
 
     def animate5(i):
@@ -311,26 +303,26 @@ for episode in range(1, episodes + 1):
         plt.legend(loc='upper left')
         plt.tight_layout()
 
-    def animate6(i):
-        x_val6.append(next(index))
+    # def animate6(i):
+    #     x_val6.append(next(index))
 
-        y_val6.append(total_power_usage_fee[i])
-        plt.figure(6)
-        plt.cla()
+    #     y_val6.append(total_power_usage_fee[i])
+    #     plt.figure(6)
+    #     plt.cla()
 
-        plt.plot(x_val6, y_val6, label='fee', color='yellow')
-        plt.xlabel('time (sec)')
-        plt.ylabel('won')
-        plt.legend(loc='upper left')
-        plt.tight_layout()
+    #     plt.plot(x_val6, y_val6, label='fee', color='yellow')
+    #     plt.xlabel('time (sec)')
+    #     plt.ylabel('won')
+    #     plt.legend(loc='upper left')
+    #     plt.tight_layout()
 
 
     ani1 = FuncAnimation(plt.figure(1), animate1, interval=1)
     ani2 = FuncAnimation(plt.figure(2), animate2, interval=1)
-    # ani3 = FuncAnimation(plt.figure(3), animate3, interval=10)
-    # ani4 = FuncAnimation(plt.figure(4), animate4, interval=10)
+    ani3 = FuncAnimation(plt.figure(3), animate3, interval=1)
+    ani4 = FuncAnimation(plt.figure(4), animate4, interval=10)
     ani5 = FuncAnimation(plt.figure(5), animate5, interval=1)
-    ani6 = FuncAnimation(plt.figure(6), animate6, interval=1)
+    # ani6 = FuncAnimation(plt.figure(6), animate6, interval=1)
     plt.tight_layout()
     plt.show()
 
