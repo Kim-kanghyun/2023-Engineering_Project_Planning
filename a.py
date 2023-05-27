@@ -334,4 +334,4 @@ for episode in range(1, episodes + 1):
     plt.tight_layout()
     plt.show()
 
-    print('Episode:{} Score:{}'.format(episode, score))
+    print('Episode :{} Score:{}'.format(episode, score))
