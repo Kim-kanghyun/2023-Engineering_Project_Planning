@@ -50,6 +50,8 @@ class RefriEnv(Env):
         self.event_DR = False
         # DR 발생 시간에 대한 random int 값
         self.event_DR_time = random.randint(13, 18)
+        self.weather_fee = {'spring':[81.4, 88.8, 100.1], 'summer':[81.4, 132.6, 155.1],
+                            'autumn':[81.4, 88.8, 100.1], 'winnter':[90.1, 120.5, 135.3]}
 
         # 임시로 설정
         self.U = 200
@@ -107,24 +109,24 @@ class RefriEnv(Env):
         # DR 상황일 때 Th보다 action(설정온도)이/가 작으면 reward의 손실을 준다.
         if self.event_DR:
             power_usage = condition(0, 5)
-            power_usage_fee = power_usage * 5
+            power_usage_fee = power_usage
         # DR이 발생되지 않았을 때의 상황
         # 전력 사용시간대에 따라 Ts를 달리 생각하여 reward값을 부여한다.
         else:
             # 경부하 시간대
             if 22 <= self.refri_hour or self.refri_hour <= 8:
                 power_usage = condition(-5, 0)
-                power_usage_fee = power_usage * 0.5
+                power_usage_fee = power_usage * self.weather_fee[self.weather][0]
             # 중간부하 시간대
             elif ((8 <= self.refri_hour <= 11) or
                   (12 <= self.refri_hour <= 13) or
                   (18 <= self.refri_hour <= 22)):
                 power_usage = condition(-3, 2)
-                power_usage_fee = power_usage * 2
+                power_usage_fee = power_usage * self.weather_fee[self.weather][1]
             # 최대부하 시간대
             else:
                 power_usage = condition(-1, 4)
-                power_usage_fee = power_usage * 3
+                power_usage_fee = power_usage * self.weather_fee[self.weather][2]
 
         # Increase refrigerator length by 1 second
         self.refri_sec += 1
@@ -268,32 +270,32 @@ for episode in range(1, episodes + 1):
         plt.tight_layout()
 
 
-    def animate3(i):
-        x_val3.append(next(index))
-
-        y_val3.append(reward1[i])
-        plt.figure(3)
-        plt.cla()
-
-        plt.plot(x_val3, y_val3, label='reward', color='b')
-        plt.xlabel('time (sec)')
-        plt.ylabel('reward')
-        plt.legend(loc='upper left')
-        plt.tight_layout()
-
-
-    def animate4(i):
-        x_val4.append(next(index))
-
-        y_val4.append(score1[i])
-        plt.figure(4)
-        plt.cla()
-
-        plt.plot(x_val4, y_val4, label='score', color='purple')
-        plt.xlabel('time (sec)')
-        plt.ylabel('score')
-        plt.legend(loc='upper left')
-        plt.tight_layout()
+    # def animate3(i):
+    #     x_val3.append(next(index))
+    #
+    #     y_val3.append(reward1[i])
+    #     plt.figure(3)
+    #     plt.cla()
+    #
+    #     plt.plot(x_val3, y_val3, label='reward', color='b')
+    #     plt.xlabel('time (sec)')
+    #     plt.ylabel('reward')
+    #     plt.legend(loc='upper left')
+    #     plt.tight_layout()
+    #
+    #
+    # def animate4(i):
+    #     x_val4.append(next(index))
+    #
+    #     y_val4.append(score1[i])
+    #     plt.figure(4)
+    #     plt.cla()
+    #
+    #     plt.plot(x_val4, y_val4, label='score', color='purple')
+    #     plt.xlabel('time (sec)')
+    #     plt.ylabel('score')
+    #     plt.legend(loc='upper left')
+    #     plt.tight_layout()
 
 
     def animate5(i):
@@ -323,12 +325,12 @@ for episode in range(1, episodes + 1):
         plt.tight_layout()
 
 
-    ani1 = FuncAnimation(plt.figure(1), animate1, interval=10)
-    ani2 = FuncAnimation(plt.figure(2), animate2, interval=10)
-    ani3 = FuncAnimation(plt.figure(3), animate3, interval=10)
-    ani4 = FuncAnimation(plt.figure(4), animate4, interval=10)
-    ani5 = FuncAnimation(plt.figure(5), animate5, interval=10)
-    ani6 = FuncAnimation(plt.figure(6), animate6, interval=10)
+    ani1 = FuncAnimation(plt.figure(1), animate1, interval=1)
+    ani2 = FuncAnimation(plt.figure(2), animate2, interval=1)
+    # ani3 = FuncAnimation(plt.figure(3), animate3, interval=10)
+    # ani4 = FuncAnimation(plt.figure(4), animate4, interval=10)
+    ani5 = FuncAnimation(plt.figure(5), animate5, interval=1)
+    ani6 = FuncAnimation(plt.figure(6), animate6, interval=1)
     plt.tight_layout()
     plt.show()
 
