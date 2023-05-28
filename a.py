@@ -75,7 +75,7 @@ class RefriEnv(Env):
         # action = self.action_space.sample()
         action = np.round(action, decimals=1)
         if self.state > action:
-            self.P_cool = math.log2(self.state-action)
+            self.P_cool = math.log2(self.state - action)
             self.P_ext = math.log2(self.T_ext - self.state)
             cool_state = (-self.P_cool * self.E + self.U * self.A * (self.state - self.T_ext) + O * self.h * (
                 self.T_ext - self.state)) / (self.m * self.c)
@@ -104,17 +104,15 @@ class RefriEnv(Env):
                 diff_state = normal_state
                 power = 100
             self.state += diff_state
-            return power / 3600000
+            return power / 36000
 
 
         # Apply action
         # DR이 발생되었을 때의 처리
-        # DR 상황일 때 Th보다 action(설정온도)이/가 작으면 reward의 손실을 준다.
         if self.event_DR:
             power_usage = condition()
             power_usage_fee = power_usage * self.weather_fee[self.weather][2]
         # DR이 발생되지 않았을 때의 상황
-        # 전력 사용시간대에 따라 Ts를 달리 생각하여 reward값을 부여한다.
         else:
             # 경부하 시간대
             if 22 <= self.refri_hour or self.refri_hour <= 8:
