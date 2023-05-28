@@ -61,8 +61,7 @@ class RefriEnv(Env):
         self.h = 10
         self.m = 10
         self.c = 3900
-        
-        self.E = 1
+        self.E = 0.5
 
     # RefriEnv 클래스의 step 메소드를 수정했음. 
     # 이 메소드에서 시간대별 문 여닫는 이벤트 수를 고려하여 냉장고의 온도가 업데이트되는 방식을 변경함. 
@@ -72,13 +71,17 @@ class RefriEnv(Env):
         # Get door opening count for the current minute
         O = self.hour_event[self.refri_sec + self.refri_min * 60]
 
-        # #action samping(-20.5 ~ 5.0 one decimals float number)
+        # #action samping(-20.5 ~ 8.0 one decimals float number)
         # action = self.action_space.sample()
         action = np.round(action, decimals=1)
         if self.state > action:
-            self.P_cool = math.log2(self.state-action)
+            self.P_cool = math.log2(self.state - action)
+            self.P_ext = math.log2(self.T_ext - self.state)
             cool_state = (-self.P_cool * self.E + self.U * self.A * (self.state - self.T_ext) + O * self.h * (
                 self.T_ext - self.state)) / (self.m * self.c)
+        else:
+            normal_state = (-self.U * self.A * (self.state - self.T_ext) + O * self.h * (self.T_ext - self.state)) / (
+                self.m * self.c)
 
         # 오후 1시에서 6시 사이(최대부하로 냉장고를 가동하는 시간)에 랜덤으로 주어지는 DR 발생시간을 계산하여 DR상태를 일으킨다.
         # DR 상황은 1시간동안 지속된다.
@@ -88,10 +91,6 @@ class RefriEnv(Env):
             self.event_DR = False
         else:
             self.event_DR = False
-
-        
-        normal_state = (-self.U * self.A * (self.state - self.T_ext) + O * self.h * (self.T_ext - self.state)) / (
-                self.m * self.c)
        
         #문열림 이벤트가 발생 했을 때, 질량을 줄인다. (m이 0이되면 식이 0으로 나눠지므로 )
         if O==1 and self.m!=0.001:
@@ -100,22 +99,20 @@ class RefriEnv(Env):
         def condition ():
             if np.any(self.state > action):
                 diff_state = cool_state
-                power = 100 + (self.state - action) * self.U * self.A * (24 - self.state) / self.E
+                power = 100 + (self.P_cool / self.E) + (self.A * self.U / self.P_ext)
             else:
                 diff_state = normal_state
                 power = 100
             self.state += diff_state
-            return power/3600000
+            return power / 36000
 
 
         # Apply action
         # DR이 발생되었을 때의 처리
-        # DR 상황일 때 Th보다 action(설정온도)이/가 작으면 reward의 손실을 준다.
         if self.event_DR:
             power_usage = condition()
-            power_usage_fee = power_usage
+            power_usage_fee = power_usage * self.weather_fee[self.weather][2]
         # DR이 발생되지 않았을 때의 상황
-        # 전력 사용시간대에 따라 Ts를 달리 생각하여 reward값을 부여한다.
         else:
             # 경부하 시간대
             if 22 <= self.refri_hour or self.refri_hour <= 8:
