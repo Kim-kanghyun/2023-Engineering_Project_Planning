@@ -49,8 +49,11 @@ class RefriEnv(Env):
         self.hour_event = opening_event_func(self.weather, self.refri_hour)
         # DR 발생에 대한 boolean 값
         self.event_DR = False
+        self.event_DR_hour = 12
         # DR 발생 시간에 대한 random int 값
-        self.event_DR_time = random.randint(13, 18)
+        while self.event_DR_hour == 12:
+            self.event_DR_hour = random.randint(9, 20)
+        self.event_DR_min = random.randint(0,59)
         self.weather_fee = {'spring':[81.4, 88.8, 100.1], 'summer':[81.4, 132.6, 155.1],
                             'autumn':[81.4, 88.8, 100.1], 'winnter':[90.1, 120.5, 135.3]}
 
@@ -71,26 +74,27 @@ class RefriEnv(Env):
         # Get door opening count for the current minute
         O = self.hour_event[self.refri_sec + self.refri_min * 60]
 
+        # 09시에서 20시 사이에 랜덤으로 주어지는 DR 발생시간을 계산하여 DR상태를 일으킨다.
+        # DR 상황은 1시간동안 지속된다.
         # #action samping(-20.5 ~ 8.0 one decimals float number)
-        # action = self.action_space.sample()
-        action = np.round(action, decimals=1)
+        if self.event_DR_hour == self.refri_hour and self.event_DR_min == self.refri_min:
+            self.event_DR = True
+            action = 8
+        elif self.event_DR_hour + 1 == self.refri_hour and self.event_DR_min == self.refri_min:
+            self.event_DR = False
+            action = np.round(action, decimals=1)
+        else:
+            self.event_DR = False
+            action = np.round(action, decimals=1)
+
         if self.state > action:
             self.P_cool = math.log2(self.state - action)
-            self.P_ext = math.log2(self.T_ext - self.state)
+            #U가 전관류율
             cool_state = (-self.P_cool * self.E + self.U * self.A * (self.state - self.T_ext) + O * self.h * (
                 self.T_ext - self.state)) / (self.m * self.c)
         else:
             normal_state = (-self.U * self.A * (self.state - self.T_ext) + O * self.h * (self.T_ext - self.state)) / (
                 self.m * self.c)
-
-        # 오후 1시에서 6시 사이(최대부하로 냉장고를 가동하는 시간)에 랜덤으로 주어지는 DR 발생시간을 계산하여 DR상태를 일으킨다.
-        # DR 상황은 1시간동안 지속된다.
-        if self.event_DR_time == self.refri_hour:
-            self.event_DR = True
-        elif self.event_DR_time + 1 == self.refri_hour:
-            self.event_DR = False
-        else:
-            self.event_DR = False
        
         #문열림 이벤트가 발생 했을 때, 질량을 줄인다. (m이 0이되면 식이 0으로 나눠지므로 )
         if O==1 and self.m!=0.001:
@@ -99,7 +103,7 @@ class RefriEnv(Env):
         def condition ():
             if np.any(self.state > action):
                 diff_state = cool_state
-                power = 100 + (self.P_cool / self.E) + (self.A * self.U / self.P_ext)
+                power = 100 + (self.P_cool / self.E) + (self.A * self.U / self.T_ext - self.state)
             else:
                 diff_state = normal_state
                 power = 100
