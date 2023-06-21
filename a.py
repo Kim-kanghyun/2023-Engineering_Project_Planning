@@ -30,6 +30,33 @@ def opening_event_func(weather, hour):
             hour_event[j] = 1
     return hour_event
 
+#각 DR event에 따른 발생 시각을 조절하는 함수들
+def standard_DR():
+    hour = 12
+    while hour == 12:
+        hour = random.randint(9,20)
+    min = random.randint(0,59)
+    duration = random.randint(1,4)
+    print('DR_hour:{} DR_min:{}'.format(hour, min))
+    return hour, min, duration
+
+def small_mid_DR():
+    hour = 12
+    while hour == 12:
+        hour = random.randint(9,20)
+    min = random.randint(0,59)
+    duration = 1
+    print('DR_hour:{} DR_min:{}'.format(hour, min))
+    return hour, min, duration
+
+def public_DR():
+    hour = 12
+    while hour == 12:
+        hour = random.randint(6,18)
+    min = random.randint(0,59)
+    duration = 1
+    print('DR_hour:{} DR_min:{}'.format(hour, min))
+    return hour, min, duration
 
 class RefriEnv(Env):
     def __init__(self, weather):
@@ -47,13 +74,16 @@ class RefriEnv(Env):
 
         self.weather = weather
         self.hour_event = opening_event_func(self.weather, self.refri_hour)
-        # DR 발생에 대한 boolean 값
-        self.event_DR = False
-        self.event_DR_hour = 12
-        # DR 발생 시간에 대한 random int 값
-        while self.event_DR_hour == 12:
-            self.event_DR_hour = random.randint(9, 20)
-        self.event_DR_min = random.randint(0,59)
+        
+        print("1 : 표준 DR\n2 : 중소형 DR\n3 : 국민 DR")
+        self.DR_version = input("Enter Demand Response type into number: ")
+        if self.DR_version == '1':
+            self.event_DR_hour, self.event_DR_min, self.duration_DR = standard_DR()
+        elif self.DR_version == '2':
+            self.event_DR_hour, self.event_DR_min, self.duration_DR = small_mid_DR()
+        else:
+            self.event_DR_hour, self.event_DR_min, self.duration_DR = public_DR()
+        
         self.weather_fee = {'spring':[81.4, 88.8, 100.1], 'summer':[81.4, 132.6, 155.1],
                             'autumn':[81.4, 88.8, 100.1], 'winnter':[90.1, 120.5, 135.3]}
 
@@ -74,21 +104,18 @@ class RefriEnv(Env):
         # Get door opening count for the current minute
         O = self.hour_event[self.refri_sec + self.refri_min * 60]
 
-        # 09시에서 20시 사이에 랜덤으로 주어지는 DR 발생시간을 계산하여 DR상태를 일으킨다.
-        # DR 상황은 1시간동안 지속된다.
         # #action samping(-20.5 ~ 8.0 one decimals float number)
+        #DR 지속시간의 설정
         if self.event_DR_hour == self.refri_hour and self.event_DR_min == self.refri_min:
-            self.event_DR = True
             action = 8
-        elif self.event_DR_hour + 1 == self.refri_hour and self.event_DR_min == self.refri_min:
-            self.event_DR = False
+        if self.event_DR_hour + self.duration_DR == self.refri_hour and self.event_DR_min == self.refri_min:
             action = np.round(action, decimals=1)
         else:
-            self.event_DR = False
             action = np.round(action, decimals=1)
 
         if self.state > action:
             self.P_cool = math.log2(self.state - action)
+            self.P_ext = math.log2(self.T_ext - self.state)
             #U가 전관류율
             cool_state = (-self.P_cool * self.E + self.U * self.A * (self.state - self.T_ext) + O * self.h * (
                 self.T_ext - self.state)) / (self.m * self.c)
@@ -103,35 +130,28 @@ class RefriEnv(Env):
         def condition ():
             if np.any(self.state > action):
                 diff_state = cool_state
-                power = 100 + (self.P_cool / self.E) + (self.A * self.U / self.T_ext - self.state)
+                power = 100 + (self.P_cool / self.E) + (self.A * self.U / self.P_ext)
             else:
                 diff_state = normal_state
                 power = 100
             self.state += diff_state
             return power / 36000
 
-
         # Apply action
-        # DR이 발생되었을 때의 처리
-        if self.event_DR:
+        # 경부하 시간대
+        if 22 <= self.refri_hour or self.refri_hour <= 8:
+            power_usage = condition()
+            power_usage_fee = power_usage * self.weather_fee[self.weather][0]
+        # 중간부하 시간대
+        elif ((8 <= self.refri_hour <= 11) or
+                (12 <= self.refri_hour <= 13) or
+                (18 <= self.refri_hour <= 22)):
+            power_usage = condition()
+            power_usage_fee = power_usage * self.weather_fee[self.weather][1]
+        # 최대부하 시간대(11~12시, 13~18시)
+        else:
             power_usage = condition()
             power_usage_fee = power_usage * self.weather_fee[self.weather][2]
-        # DR이 발생되지 않았을 때의 상황
-        else:
-            # 경부하 시간대
-            if 22 <= self.refri_hour or self.refri_hour <= 8:
-                power_usage = condition()
-                power_usage_fee = power_usage * self.weather_fee[self.weather][0]
-            # 중간부하 시간대
-            elif ((8 <= self.refri_hour <= 11) or
-                  (12 <= self.refri_hour <= 13) or
-                  (18 <= self.refri_hour <= 22)):
-                power_usage = condition()
-                power_usage_fee = power_usage * self.weather_fee[self.weather][1]
-            # 최대부하 시간대
-            else:
-                power_usage = condition()
-                power_usage_fee = power_usage * self.weather_fee[self.weather][2]
 
         # Increase refrigerator length by 1 second
         self.refri_sec += 1
@@ -172,7 +192,7 @@ class RefriEnv(Env):
         return self.state
 
 
-env = RefriEnv("spring")
+env = RefriEnv("summer")
 
 env.observation_space.sample()
 
@@ -225,7 +245,6 @@ for episode in range(1, episodes + 1):
         a = a + 1
 
     index = count()
-
 
     def animate1(i):
         x_val1.append(next(index))
