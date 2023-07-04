@@ -129,7 +129,7 @@ class RefriEnv(Env):
             normal_state = (-self.U * self.A * (self.state - self.T_ext) + O * self.h * (self.T_ext - self.state)) / (
                 self.m * self.c)
        
-        #문열림 이벤트가 발생 했을 때, 질량을 줄인다. (m이 0이되면 식이 0으로 나눠지므로 )
+        #문열림 이벤트가 발생 했을 때, 질량을 줄인다. (m이 0이되면 식이 0으로 나눠지므로)
         if O==1 and self.m!=0.001:
             self.m+=-0.001
             
@@ -141,7 +141,7 @@ class RefriEnv(Env):
                 diff_state = normal_state
                 power = 100
             self.state += diff_state
-            return power / 36000
+            return power / 3600
 
         # Apply action
         # 경부하 시간대
@@ -187,57 +187,39 @@ class RefriEnv(Env):
 
         # Set placeholder for info
         info = {}
+        #reward func
+        # reward = (1-power_usage_fee)
+        # if self.DR_event == True:
+        #     reward = reward*10
+        #     if self.state > 10 or self.state < 4:
+        #         reward -= 10
+        #     else:
+        #         reward += 1
+        # else:
+        #     if self.state > 8 or self.state < 2:
+        #         reward -= 1
+        #     else:
+        #         reward += 1
+
         #reward func 1
-        #DR policy에서 최적의 온도를 찾아 유지한다면 최고의 보상을 주어야 한다.
-        #최적의 온도는 어떻게 판단할 것인가? -> 최적의 온도를 정한다는 건 그 최적의 온도로만 맞추게 하는 지도학습인가..?
-        #현재 DR은 DR 상황일 때 따로 전기요금을 계산하여 reward를 주어지게 한다.
-        #다른 방안으로 DR상황일 때 일반상황과 비교하여 절약된 전기요금에 비례하게 reward를 주어지게 하는 방안도 고려할 수 있다.
-        #두 번째 방안은 방법론에 대한 고민이 더 필요해 보인다.
-        reward = (1-power_usage_fee)*10
-        if self.DR_event == True:
-            reward = reward*10
-            if self.state > 10 or self.state < 4:
-                reward -= 10
-            else:
-                reward += 1
-        else:
-            if self.state > 8 or self.state < 2:
-                reward -= 1
-            else:
-                reward += 1
+        # if self.state > 8 or self.state < 2:
+        #     reward = -2
+        # else:
+        #     reward = (1-power_usage_fee)
 
         #reward func 2
-        #온도보다 전력요금에 중요도를 더 둔다.
-        # reward = (1-power_usage_fee) * 10
+        # weight = 0.3
         # if self.state > 8 or self.state < 2:
-        #     reward -= 1
+        #     reward = -2
         # else:
-        #     reward += 1
+        #     reward = weight*(1-power_usage_fee) + (1-weight)*(self.state)
 
-        #reward func 3
-        #온도와 전력요금 각각에 일정 weight을 곱하여 하나의 reward value를 생성한다.
-        #온도범위가 넘어갔을 떄는 reward 손실을 준다.
+        #reward func 3 - 보류(안 될 확률이 매우 큼)
+        # weight = 0.3
         # if self.state > 8 or self.state < 2:
-        #     reward = -10
+        #     reward = -2
         # else:
-        #     reward = 0.7 * (1-power_usage_fee) + 0.3 * self.state
-        
-        #reward func 4
-        #범위를 벗어났을 때만 큰 penalty를 준다.
-        # if self.state > 8 or self.state < 2:
-        #     reward = -10
-        # else:
-        #     reward = 1-power_usage_fee
-
-        #reward func 5
-        #reward는 전력사용량과 전기요금을 모두 고려한다.
-        #같은 전력사용량이더라도 시간대에 따라 전기요금이 달라지기 때문에
-        #낮은 전력사용량과 전기요금을 줄이는 방안을 모두 고려해야 한다고 판단함.
-        #state는 범위를 벗어나지 못하도록 한다. (벗어났을 때 penalty)
-        # if self.state > 8 or self.state < 2:
-        #     reward = -10
-        # else:
-        #     reward = 0.4*(1-power_usage_fee) + 0.6*(1-power_usage)
+        #     reward = weight * (1-power_usage_fee) + (1-weight) * (1-power_usage)
 
         # Return step information
         return self.state, reward, done, info
