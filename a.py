@@ -61,10 +61,11 @@ def public_DR():
 class RefriEnv(Env):
     def __init__(self, weather):
         # action space
-        custom_action_space = Box(low=-20.0, high=8.0, shape=(1,), dtype=float)
+        #custom_action_space = Box(low=-20.0, high=8.0, shape=(1,), dtype=float)
+        custom_action_space = Discrete(280)
         self.action_space = custom_action_space
         # Temperature array
-        self.observation_space = Box(low=np.array([-50]), high=np.array([50]))
+        self.observation_space = Box(low=np.array([-30]), high=np.array([20]))
         # Set start temp
         self.state = 0 + random.randint(-3, 3)
         # Set refrigerator length
@@ -74,7 +75,7 @@ class RefriEnv(Env):
 
         self.weather = weather
         self.hour_event = opening_event_func(self.weather, self.refri_hour)
-        
+        self.DR_event = False
         print("1 : 표준 DR\n2 : 중소형 DR\n3 : 국민 DR")
         self.DR_version = input("Enter Demand Response type into number: ")
         if self.DR_version == '1':
@@ -83,9 +84,12 @@ class RefriEnv(Env):
             self.event_DR_hour, self.event_DR_min, self.duration_DR = small_mid_DR()
         else:
             self.event_DR_hour, self.event_DR_min, self.duration_DR = public_DR()
-        
+
         self.weather_fee = {'spring':[81.4, 88.8, 100.1], 'summer':[81.4, 132.6, 155.1],
                             'autumn':[81.4, 88.8, 100.1], 'winnter':[90.1, 120.5, 135.3]}
+        #임시 dr_fee
+        self.dr_fee = {'spring':[72.4, 79.8, 91.1], 'summer':[72.4, 123.6, 146.1],
+                            'autumn':[72.4, 79.8, 91.1], 'winnter':[81.1, 111.5, 126.3]}
 
         # 임시로 설정
         self.U = 200
@@ -103,18 +107,20 @@ class RefriEnv(Env):
         # Get current minute
         # Get door opening count for the current minute
         O = self.hour_event[self.refri_sec + self.refri_min * 60]
+        self.action = (float(action)-200)/10.0
 
         # #action samping(-20.5 ~ 8.0 one decimals float number)
         #DR 지속시간의 설정
         if self.event_DR_hour == self.refri_hour and self.event_DR_min == self.refri_min:
-            action = 8
+            self.DR_event = True
         if self.event_DR_hour + self.duration_DR == self.refri_hour and self.event_DR_min == self.refri_min:
-            action = np.round(action, decimals=1)
+            self.action = self.action
+            self.DR_event = False
         else:
-            action = np.round(action, decimals=1)
+            self.action = self.action
 
-        if self.state > action:
-            self.P_cool = math.log2(self.state - action)
+        if self.state > self.action:
+            self.P_cool = math.log2(self.state - self.action)
             self.P_ext = math.log2(self.T_ext - self.state)
             #U가 전관류율
             cool_state = (-self.P_cool * self.E + self.U * self.A * (self.state - self.T_ext) + O * self.h * (
@@ -128,7 +134,7 @@ class RefriEnv(Env):
             self.m+=-0.001
             
         def condition ():
-            if np.any(self.state > action):
+            if np.any(self.state > self.action):
                 diff_state = cool_state
                 power = 100 + (self.P_cool / self.E) + (self.A * self.U / self.P_ext)
             else:
@@ -141,17 +147,26 @@ class RefriEnv(Env):
         # 경부하 시간대
         if 22 <= self.refri_hour or self.refri_hour <= 8:
             power_usage = condition()
-            power_usage_fee = power_usage * self.weather_fee[self.weather][0]
+            if self.DR_event == True:
+                power_usage_fee = power_usage * self.dr_fee[self.weather][0]
+            else:
+                power_usage_fee = power_usage * self.weather_fee[self.weather][0]
         # 중간부하 시간대
         elif ((8 <= self.refri_hour <= 11) or
                 (12 <= self.refri_hour <= 13) or
                 (18 <= self.refri_hour <= 22)):
             power_usage = condition()
-            power_usage_fee = power_usage * self.weather_fee[self.weather][1]
+            if self.DR_event == True:
+                power_usage_fee = power_usage * self.dr_fee[self.weather][1]
+            else:
+                power_usage_fee = power_usage * self.weather_fee[self.weather][1]
         # 최대부하 시간대(11~12시, 13~18시)
         else:
             power_usage = condition()
-            power_usage_fee = power_usage * self.weather_fee[self.weather][2]
+            if self.DR_event == True:
+                power_usage_fee = power_usage * self.dr_fee[self.weather][2]
+            else:
+                power_usage_fee = power_usage * self.weather_fee[self.weather][2]
 
         # Increase refrigerator length by 1 second
         self.refri_sec += 1
@@ -172,13 +187,65 @@ class RefriEnv(Env):
 
         # Set placeholder for info
         info = {}
-        reward = power_usage_fee
+        #reward func 1
+        #DR policy에서 최적의 온도를 찾아 유지한다면 최고의 보상을 주어야 한다.
+        #최적의 온도는 어떻게 판단할 것인가? -> 최적의 온도를 정한다는 건 그 최적의 온도로만 맞추게 하는 지도학습인가..?
+        #현재 DR은 DR 상황일 때 따로 전기요금을 계산하여 reward를 주어지게 한다.
+        #다른 방안으로 DR상황일 때 일반상황과 비교하여 절약된 전기요금에 비례하게 reward를 주어지게 하는 방안도 고려할 수 있다.
+        #두 번째 방안은 방법론에 대한 고민이 더 필요해 보인다.
+        reward = (1-power_usage_fee)*10
+        if self.DR_event == True:
+            reward = reward*10
+            if self.state > 10 or self.state < 4:
+                reward -= 10
+            else:
+                reward += 1
+        else:
+            if self.state > 8 or self.state < 2:
+                reward -= 1
+            else:
+                reward += 1
+
+        #reward func 2
+        #온도보다 전력요금에 중요도를 더 둔다.
+        # reward = (1-power_usage_fee) * 10
+        # if self.state > 8 or self.state < 2:
+        #     reward -= 1
+        # else:
+        #     reward += 1
+
+        #reward func 3
+        #온도와 전력요금 각각에 일정 weight을 곱하여 하나의 reward value를 생성한다.
+        #온도범위가 넘어갔을 떄는 reward 손실을 준다.
+        # if self.state > 8 or self.state < 2:
+        #     reward = -10
+        # else:
+        #     reward = 0.7 * (1-power_usage_fee) + 0.3 * self.state
+        
+        #reward func 4
+        #범위를 벗어났을 때만 큰 penalty를 준다.
+        # if self.state > 8 or self.state < 2:
+        #     reward = -10
+        # else:
+        #     reward = 1-power_usage_fee
+
+        #reward func 5
+        #reward는 전력사용량과 전기요금을 모두 고려한다.
+        #같은 전력사용량이더라도 시간대에 따라 전기요금이 달라지기 때문에
+        #낮은 전력사용량과 전기요금을 줄이는 방안을 모두 고려해야 한다고 판단함.
+        #state는 범위를 벗어나지 못하도록 한다. (벗어났을 때 penalty)
+        # if self.state > 8 or self.state < 2:
+        #     reward = -10
+        # else:
+        #     reward = 0.4*(1-power_usage_fee) + 0.6*(1-power_usage)
+
         # Return step information
         return self.state, reward, done, info
 
-    def render(self):
-        # Implement viz
-        pass
+    def render(self ,mode='human',close=True):
+        if self.refri_min%5==0 and self.refri_sec%60==0:
+            print("action : ",self.action)
+            print("state : ", self.state)   
 
     def reset(self):
         # Reset refrigerator temperature
@@ -187,8 +254,10 @@ class RefriEnv(Env):
         self.refri_hour = 0
         self.refri_min = 0
         self.refri_sec = 0
+        
+        self.m = 10
         # Reset door opening event count
-        self.hour_event = opening_event_func(self.weather, self.refri_hour)
+        #self.hour_event = opening_event_func(self.weather, self.refri_hour)
         return self.state
 
 
